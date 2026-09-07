@@ -1,5 +1,4 @@
-# ALB-ASG
-# Guía paso a paso: VPC + ALB + ASG + CodeDeploy en AWS
+# ALB-ASG VPC + ALB + ASG + CodeDeploy en AWS
 
 Guía de replicación basada en `guia-practica-aws-vpc-asg-codedeploy.md`.
 Objetivo: implementar en AWS una VPC con balanceo de carga mediante **Application Load Balancer** y **Auto Scaling Group**.
