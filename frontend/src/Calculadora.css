@@ -1,0 +1,167 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+
+/* Carcasa */
+
+.calculator {
+  background-color: #1f2937; /* gris oscuro elegante */
+  padding: 20px;
+  border-radius: 16px;
+  width: 300px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+
+/* Pantalla */
+
+.display {
+  /*background-color: #111827;*/
+  color: #f9fafb;
+  font-size: 1rem;
+  text-align: left;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+/* Etiqueta */
+
+.labels{
+  display: grid;
+  grid-template-columns: 1fr 2fr; /* izquierda grande, derecha chica */
+  gap: 10px;
+  margin-bottom: 20px;;
+}
+
+.label{
+    /*background-color: #111827;*/
+    color: #f9fafb;
+    font-size: 1rem;
+    text-align: left;
+    padding: 5px;
+    border-radius: 2px;
+    margin-bottom: 5px;   
+    
+    display: flex;
+    align-items: center;
+    /* Centra verticalmente imagen y texto */
+    gap: 1px;
+    /* Espacio entre el dibujo y las letras */
+    flex-grow: 1;
+
+  }
+.label img{
+  width: 30px;
+  height: 30px;
+  margin-right: 6px;
+  vertical-align: middle;
+
+}
+
+.text{
+    background-color: #111827;
+    color: #f9fafb;
+    font-size: 1rem;
+    text-align: left;
+    padding: 5px;
+    border-radius: 2px;
+    margin-bottom: 5px;
+}
+
+/* Contenedor de botones */
+
+.buttons {
+  display: grid;
+  grid-template-columns: 3fr 1fr; /* izquierda grande, derecha chica */
+  gap: 10px;
+}
+
+/* Esto es para los botones del 0 al 9*/
+.buttons_numbers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/*Esto para el boton de igualacion*/
+.equal {
+  grid-column: span 2;
+}
+
+.buttons_operations {
+  display: grid;
+  grid-template-rows: repeat(4, 1fr);
+  gap: 10px;
+}
+
+
+/* Botones */
+button {
+  padding: 15px;
+  font-size: 1.2rem;
+  border: none;
+  border-radius: 8px;
+  background-color: #e5e7eb;
+  cursor: pointer;
+  transition: 0.2s;
+  transition: transform 0.1s ease;
+}
+
+button:active {
+  transform: scale(0.95);
+}
+
+button:hover {
+  background-color: #d1d5db;
+}
+
+.buttons_container {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 20px;
+}
+
+.power {
+  display: flex;
+  justify-content: left;
+}
+
+.on_off {
+  width: 100%;
+  max-width: 120px;  
+  padding: 10px;
+  font-size: 1rem;
+  background-color: #f87171; 
+  color: white;
+  border-radius: 8px;
+}
+
+
+.led-display {
+  background-color: #0b0f14;
+  color: #00ffcc;
+  font-family: 'Courier New', monospace;
+  font-size: 2rem;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: right;
+  letter-spacing: 2px;
+  box-shadow: 0 0 10px rgba(0, 255, 204, 0.4);
+  min-height: 40px;
+  margin-bottom: 20px;
+}
+
+.led-display.off {
+  background-color: #0b0f14;
+  color: #1f2937; /* gris oscuro */
+  box-shadow: none;
+  opacity: 0.4;
+}

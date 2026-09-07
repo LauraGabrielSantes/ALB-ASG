@@ -1,0 +1,48 @@
+services:
+  backend:
+    container_name: backend-codedeploy
+    image: ${ECR_REGISTRY:-684707794609.dkr.ecr.us-east-1.amazonaws.com}/calculadora/backend:${APP_VERSION:-latest}
+    expose:
+      - "8000"
+    networks:
+      - app
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/health').getcode()==200 else 1)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    container_name: frontend-codedeploy
+    image: ${ECR_REGISTRY:-684707794609.dkr.ecr.us-east-1.amazonaws.com}/calculadora/frontend:${APP_VERSION:-latest}
+    ports:
+      - "3000:8080"
+    depends_on:
+      - backend
+    environment:
+      - BACKEND_HOST=backend
+      - BACKEND_PORT=8000
+    networks:
+      - app
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /etc/nginx/conf.d:uid=101,mode=1777
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  app:
+    driver: bridge

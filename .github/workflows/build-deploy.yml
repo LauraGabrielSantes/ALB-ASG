@@ -1,0 +1,165 @@
+name: Build and Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/*'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  backend-build:
+    name: Build and Push Backend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        env:
+          BACKEND_ECR_REGISTRY: ${{ vars.BACKEND_ECR_REGISTRY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t "$BACKEND_ECR_REGISTRY:$IMAGE_TAG" \
+            -t "$BACKEND_ECR_REGISTRY:latest" \
+            ./backend
+
+          docker push "$BACKEND_ECR_REGISTRY:$IMAGE_TAG"
+          docker push "$BACKEND_ECR_REGISTRY:latest"
+
+
+  frontend-build:
+    name: Build and Push Frontend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push frontend image
+        env:
+          FRONTEND_ECR_REGISTRY: ${{ vars.FRONTEND_ECR_REGISTRY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t "$FRONTEND_ECR_REGISTRY:$IMAGE_TAG" \
+            -t "$FRONTEND_ECR_REGISTRY:latest" \
+            ./frontend
+
+          docker push "$FRONTEND_ECR_REGISTRY:$IMAGE_TAG"
+          docker push "$FRONTEND_ECR_REGISTRY:latest"
+
+
+  deploy:
+    name: Deploy artifact to CodeDeploy
+    needs:
+      - backend-build
+      - frontend-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Write app version artifact
+        run: |
+          echo "${{ github.ref_name }}" > .app-version
+
+      - name: Prepare startup script for deployment
+        env:
+          DEPLOY_AWS_REGION: ${{ vars.AWS_REGION }}
+          DEPLOY_ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+          DEPLOY_APP_VERSION: latest
+        run: |
+          mkdir -p scripts
+
+          cat > scripts/start_app.sh <<EOF
+          #!/bin/bash
+
+          set -euo pipefail
+
+          APP_VERSION="\${APP_VERSION:-${DEPLOY_APP_VERSION}}"
+          export APP_VERSION
+
+          cd /opt/mi-app
+
+          AWS_REGION="\${AWS_REGION:-${DEPLOY_AWS_REGION}}"
+          export AWS_REGION
+
+          ECR_REGISTRY="\${ECR_REGISTRY:-${DEPLOY_ECR_REGISTRY}}"
+
+          if [[ -z "\${ECR_REGISTRY}" ]]; then
+            ACCOUNT_ID="\$(aws sts get-caller-identity --query Account --output text)"
+            ECR_REGISTRY="\${ACCOUNT_ID}.dkr.ecr.\${AWS_REGION}.amazonaws.com"
+          fi
+
+          export ECR_REGISTRY
+
+          aws ecr get-login-password --region "\${AWS_REGION}" | \
+            docker login --username AWS --password-stdin "\${ECR_REGISTRY}"
+
+          COMPOSE_FILE="\${COMPOSE_FILE:-docker-compose.yml}"
+          export COMPOSE_FILE
+
+          docker compose -f "\${COMPOSE_FILE}" pull
+
+          docker compose -f "\${COMPOSE_FILE}" down --remove-orphans
+
+          docker compose -f "\${COMPOSE_FILE}" up -d
+
+          docker image prune -f
+          EOF
+
+          chmod +x scripts/start_app.sh
+
+      - name: Push artifact to S3
+        run: |
+          aws deploy push \
+            --application-name "${{ vars.CODEDEPLOY_APP }}" \
+            --s3-location "s3://${{ vars.S3_BUCKET }}/releases/${{ github.ref_name }}-${{ github.sha }}.zip" \
+            --source .
+
+      - name: Create CodeDeploy deployment
+        run: |
+          aws deploy create-deployment \
+            --application-name "${{ vars.CODEDEPLOY_APP }}" \
+            --deployment-group-name "${{ vars.CODEDEPLOY_GROUP }}" \
+            --s3-location "bucket=${{ vars.S3_BUCKET }},key=releases/${{ github.ref_name }}-${{ github.sha }}.zip,bundleType=zip" \
+            --description "Deploy ${{ github.ref_name }} (commit ${{ github.sha }})"
