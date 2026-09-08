@@ -9,6 +9,11 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    volumes:
+      # Carpeta del host donde el agente de CloudWatch hará tail
+      - /var/log/calculadora:/var/log/calculadora
+    # Vuelca el stdout (uvicorn) al archivo que lee el agente
+    command: "uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /var/log/calculadora/calculadora.log"
     healthcheck:
       test:
         [
@@ -42,6 +47,10 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    volumes:
+      - /var/log/calculadora:/var/log/calculadora
+    # Vuelca el stdout (nginx) al archivo que lee el agente
+    command: 'nginx -g "daemon off;" 2>&1 | tee -a /var/log/calculadora/calculadora.log'
 
 networks:
   app:
