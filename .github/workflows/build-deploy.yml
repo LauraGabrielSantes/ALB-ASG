@@ -106,7 +106,7 @@ jobs:
         env:
           DEPLOY_AWS_REGION: ${{ vars.AWS_REGION }}
           DEPLOY_ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
-          DEPLOY_APP_VERSION: latest
+          DEPLOY_APP_VERSION: ${{ github.sha }}
         run: |
           mkdir -p scripts
 
