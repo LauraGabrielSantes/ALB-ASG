@@ -1,7 +1,7 @@
 services:
   backend:
-    container_name: backend-codedeploy
-    image: ${ECR_REGISTRY:-684707794609.dkr.ecr.us-east-1.amazonaws.com}/calculadora/backend:${APP_VERSION:-latest}
+    container_name: backend
+    image: ${ECR_REGISTRY}/calculadora/backend:${APP_VERSION:-latest}
     expose:
       - "8000"
     networks:
@@ -9,26 +9,15 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    volumes:
-      # Carpeta del host donde el agente de CloudWatch hará tail
-      - /var/log/calculadora:/var/log/calculadora
-    # Vuelca el stdout (uvicorn) al archivo que lee el agente
-    command: "uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /var/log/calculadora/calculadora.log"
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/health').getcode()==200 else 1)",
-        ]
+      test: ["CMD", "python", "-c", "import sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/api/health').getcode()==200 else 1)"]
       interval: 5s
       timeout: 5s
       retries: 3
 
   frontend:
-    container_name: frontend-codedeploy
-    image: ${ECR_REGISTRY:-684707794609.dkr.ecr.us-east-1.amazonaws.com}/calculadora/frontend:${APP_VERSION:-latest}
+    container_name: frontend
+    image: ${ECR_REGISTRY}/calculadora/frontend:${APP_VERSION:-latest}
     ports:
       - "3000:8080"
     depends_on:
@@ -47,10 +36,6 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
-    volumes:
-      - /var/log/calculadora:/var/log/calculadora
-    # Vuelca el stdout (nginx) al archivo que lee el agente
-    command: 'nginx -g "daemon off;" 2>&1 | tee -a /var/log/calculadora/calculadora.log'
 
 networks:
   app:

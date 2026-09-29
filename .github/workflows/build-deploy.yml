@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-      - 'release/*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -12,7 +14,6 @@ permissions:
   contents: read
 
 jobs:
-
   backend-build:
     name: Build and Push Backend Image
     runs-on: ubuntu-latest
@@ -23,143 +24,183 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure AWS credentials via OIDC
+      - name: Configurar credenciales AWS via OIDC
+        if: github.event_name != 'pull_request'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Autenticar Docker con ECR
+        if: github.event_name != 'pull_request'
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push backend image
+      - name: Build y push de la imagen Backend
+        if: github.event_name != 'pull_request'
         env:
           BACKEND_ECR_REGISTRY: ${{ vars.BACKEND_ECR_REGISTRY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build \
-            -t "$BACKEND_ECR_REGISTRY:$IMAGE_TAG" \
-            -t "$BACKEND_ECR_REGISTRY:latest" \
-            ./backend
+            -t $BACKEND_ECR_REGISTRY:$IMAGE_TAG \
+            -t $BACKEND_ECR_REGISTRY:latest \
+            ./backend/.
+          docker push $BACKEND_ECR_REGISTRY:$IMAGE_TAG
+          docker push $BACKEND_ECR_REGISTRY:latest
 
-          docker push "$BACKEND_ECR_REGISTRY:$IMAGE_TAG"
-          docker push "$BACKEND_ECR_REGISTRY:latest"
+      - name: Build local de la imagen Backend (validación PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          docker build -t backend:pr ./backend/.
 
+      - name: Escribir summary del job (Backend)
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "## Resumen del job - Backend" >> $GITHUB_STEP_SUMMARY
+          echo "- Job: ${GITHUB_JOB}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${JOB_STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${GITHUB_SHA}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image tag: ${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
 
   frontend-build:
-    name: Build and Push Frontend Image
+    name: Build Frontend Docker Image
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout del repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure AWS credentials via OIDC
+      - name: Configurar credenciales AWS via OIDC
+        if: github.event_name != 'pull_request'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Autenticar Docker con ECR
+        if: github.event_name != 'pull_request'
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push frontend image
+      - name: Build y push de la imagen Frontend
+        if: github.event_name != 'pull_request'
         env:
           FRONTEND_ECR_REGISTRY: ${{ vars.FRONTEND_ECR_REGISTRY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build \
-            -t "$FRONTEND_ECR_REGISTRY:$IMAGE_TAG" \
-            -t "$FRONTEND_ECR_REGISTRY:latest" \
-            ./frontend
+            -t $FRONTEND_ECR_REGISTRY:$IMAGE_TAG \
+            -t $FRONTEND_ECR_REGISTRY:latest \
+            ./frontend/.
+          docker push $FRONTEND_ECR_REGISTRY:$IMAGE_TAG
+          docker push $FRONTEND_ECR_REGISTRY:latest
 
-          docker push "$FRONTEND_ECR_REGISTRY:$IMAGE_TAG"
-          docker push "$FRONTEND_ECR_REGISTRY:latest"
+      - name: Build local de la imagen Frontend (validación PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          docker build -t frontend:pr ./frontend/.
 
+      - name: Escribir summary del job (Frontend)
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "## Resumen del job - Frontend" >> $GITHUB_STEP_SUMMARY
+          echo "- Job: ${GITHUB_JOB}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${JOB_STATUS}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${GITHUB_SHA}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image tag: ${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
 
   deploy:
-    name: Deploy artifact to CodeDeploy
+    name: Deploy to AWS
+    if: github.event_name != 'pull_request'
     needs:
       - backend-build
       - frontend-build
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout del repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure AWS credentials via OIDC
+      - name: Configurar credenciales AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Write app version artifact
+      - name: Verificar estructura
         run: |
-          echo "${{ github.ref_name }}" > .app-version
+          echo "--- Raíz ---"
+          ls -la
+          echo "--- Scripts ---"
+          ls -la scripts || true
 
-      - name: Prepare startup script for deployment
+      - name: Preparar script de arranque con variables del workflow
         env:
           DEPLOY_AWS_REGION: ${{ vars.AWS_REGION }}
           DEPLOY_ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
-          DEPLOY_APP_VERSION: ${{ github.sha }}
         run: |
-          mkdir -p scripts
-
           cat > scripts/start_app.sh <<EOF
           #!/bin/bash
-
           set -euo pipefail
 
-          APP_VERSION="\${APP_VERSION:-${DEPLOY_APP_VERSION}}"
+          APP_DIR="/opt/mi-app"
+          APP_VERSION="\${APP_VERSION:-latest}"
           export APP_VERSION
 
-          cd /opt/mi-app
+          cd "\$APP_DIR"
 
           AWS_REGION="\${AWS_REGION:-${DEPLOY_AWS_REGION}}"
           export AWS_REGION
 
-          ECR_REGISTRY="\${ECR_REGISTRY:-${DEPLOY_ECR_REGISTRY}}"
+          INSTANCE_IP="\${INSTANCE_IP:-\$(hostname -I | awk '{print \$1}')}"
+          export INSTANCE_IP
 
-          if [[ -z "\${ECR_REGISTRY}" ]]; then
+          ECR_REGISTRY="\${ECR_REGISTRY:-${DEPLOY_ECR_REGISTRY}}"
+          if [[ -z "\$ECR_REGISTRY" ]]; then
             ACCOUNT_ID="\$(aws sts get-caller-identity --query Account --output text)"
             ECR_REGISTRY="\${ACCOUNT_ID}.dkr.ecr.\${AWS_REGION}.amazonaws.com"
           fi
-
           export ECR_REGISTRY
 
-          aws ecr get-login-password --region "\${AWS_REGION}" | \
-            docker login --username AWS --password-stdin "\${ECR_REGISTRY}"
+          aws ecr get-login-password --region "\$AWS_REGION" | \\
+            docker login --username AWS --password-stdin \\
+            "\$ECR_REGISTRY"
 
           COMPOSE_FILE="\${COMPOSE_FILE:-docker-compose.yml}"
           export COMPOSE_FILE
 
-          docker compose -f "\${COMPOSE_FILE}" pull
-
-          docker compose -f "\${COMPOSE_FILE}" down --remove-orphans
-
-          docker compose -f "\${COMPOSE_FILE}" up -d
-
+          docker compose -f "\$COMPOSE_FILE" pull
+          docker compose -f "\$COMPOSE_FILE" down --remove-orphans
+          docker compose -f "\$COMPOSE_FILE" up -d
           docker image prune -f
           EOF
-
           chmod +x scripts/start_app.sh
 
-      - name: Push artifact to S3
+      - name: Empaquetar y subir a S3
+        id: s3_push
+        env:
+          S3_KEY: releases/${{ github.sha }}.zip
         run: |
           aws deploy push \
             --application-name "${{ vars.CODEDEPLOY_APP }}" \
-            --s3-location "s3://${{ vars.S3_BUCKET }}/releases/${{ github.ref_name }}-${{ github.sha }}.zip" \
+            --s3-location "s3://${{ vars.S3_BUCKET }}/$S3_KEY" \
             --source .
 
-      - name: Create CodeDeploy deployment
+          echo "s3_key=$S3_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Crear deployment en CodeDeploy
+        env:
+          S3_KEY: ${{ steps.s3_push.outputs.s3_key }}
         run: |
           aws deploy create-deployment \
             --application-name "${{ vars.CODEDEPLOY_APP }}" \
             --deployment-group-name "${{ vars.CODEDEPLOY_GROUP }}" \
-            --s3-location "bucket=${{ vars.S3_BUCKET }},key=releases/${{ github.ref_name }}-${{ github.sha }}.zip,bundleType=zip" \
-            --description "Deploy ${{ github.ref_name }} (commit ${{ github.sha }})"
+            --s3-location "bucket=${{ vars.S3_BUCKET }},key=$S3_KEY,bundleType=zip" \
+            --description "Deploy commit ${{ github.sha }}"
