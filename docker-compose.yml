@@ -51,8 +51,12 @@ services:
       - no-new-privileges:true
     volumes:
       - /var/log/calculadora:/var/log/calculadora
-    # Vuelca el stdout (nginx) al archivo que lee el agente (mismo `umask 000`)
-    command: ["sh", "-c", "umask 000; nginx -g 'daemon off;' 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
+    # Vuelca el stdout (nginx) al archivo que lee el agente (mismo `umask 000`).
+    # OJO: hay que invocar `/docker-entrypoint.sh nginx ...` explícitamente. El
+    # entrypoint de nginx SOLO procesa la plantilla (/etc/nginx/templates ->
+    # /etc/nginx/conf.d) si $1 es "nginx". Al envolver en `sh -c`, $1=sh y NO
+    # genera la config -> nginx no escucha en 8080 -> el ALB marca unhealthy.
+    command: ["sh", "-c", "umask 000; /docker-entrypoint.sh nginx -g 'daemon off;' 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
 
 networks:
   app:
