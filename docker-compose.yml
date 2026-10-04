@@ -12,8 +12,10 @@ services:
     volumes:
       # Carpeta del host donde el agente de CloudWatch hará tail
       - /var/log/calculadora:/var/log/calculadora
-    # Vuelca el stdout (uvicorn) al archivo que lee el agente
-    command: ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
+    # Vuelca el stdout (uvicorn) al archivo que lee el agente.
+    # `umask 000` hace que el archivo nazca 666: backend (appuser) y frontend
+    # (uid 101) escriben el MISMO archivo, y si lo crea 644 el otro no puede.
+    command: ["sh", "-c", "umask 000; uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
     healthcheck:
       test:
         [
@@ -49,8 +51,8 @@ services:
       - no-new-privileges:true
     volumes:
       - /var/log/calculadora:/var/log/calculadora
-    # Vuelca el stdout (nginx) al archivo que lee el agente
-    command: ["sh", "-c", "nginx -g 'daemon off;' 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
+    # Vuelca el stdout (nginx) al archivo que lee el agente (mismo `umask 000`)
+    command: ["sh", "-c", "umask 000; nginx -g 'daemon off;' 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
 
 networks:
   app:
