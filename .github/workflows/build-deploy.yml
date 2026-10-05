@@ -145,13 +145,14 @@ jobs:
         env:
           DEPLOY_AWS_REGION: ${{ vars.AWS_REGION }}
           DEPLOY_ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+          DEPLOY_APP_VERSION: ${{ github.sha }}
         run: |
           cat > scripts/start_app.sh <<EOF
           #!/bin/bash
           set -euo pipefail
 
           APP_DIR="/opt/mi-app"
-          APP_VERSION="\${APP_VERSION:-latest}"
+          APP_VERSION="\${APP_VERSION:-${DEPLOY_APP_VERSION}}"
           export APP_VERSION
 
           cd "\$APP_DIR"
